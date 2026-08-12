@@ -1,0 +1,16 @@
+{
+  "name": "elfina-platform",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "services/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n companion,booking -c green,yellow \"npm run dev -w companion-app\" \"npm run dev -w booking-app\"",
+    "seed": "node --env-file=.env scripts/seed.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

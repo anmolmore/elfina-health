@@ -1,0 +1,14 @@
+{
+  "name": "companion-app",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.mjs",
+  "scripts": {
+    "dev": "node --env-file=../../.env --watch src/index.mjs",
+    "start": "node src/index.mjs"
+  },
+  "dependencies": {
+    "express": "^4.21.1"
+  }
+}
