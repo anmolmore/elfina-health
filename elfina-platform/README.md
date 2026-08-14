@@ -33,12 +33,32 @@ matches. Both services fetch and filter in application code instead. That's
 fine at this table size and stops being fine well before 3x volume — worth
 naming as a real constraint in the memo, not just a mock one.
 
+## NeetoCal booking (companion-app)
+
+`services/companion-app` has a second, NeetoCal-backed booking path
+alongside the booking-app's own slot picker: `/clients/:id/book` embeds
+NeetoCal's scheduling page in an iframe (prefilled with the client's
+name/email), listens for the `message` event NeetoCal's embed posts on
+booking, and writes the resulting Session to Airtable client-side →
+`POST /clients/:id/book/confirm`.
+
+The exact NeetoCal postMessage payload shape isn't published, so the
+handler extracts common field-name variants defensively and **always**
+appends the raw payload to the client's Intake Notes — if the extraction
+guesses are wrong, the slot/time is still recoverable by hand from there.
+Verify against a real NeetoCal booking before relying on the extracted
+Slot Start/End.
+
+Set `NEETOCAL_BOOKING_URL` to override the default scheduling link
+(`https://elfina-health-anmol.neetocal.com/meeting-with-anmol-more`).
+
 ## Running locally
 
 Requires `.env` (gitignored) with:
 ```
 AIRTABLE_PAT=pat...
 AIRTABLE_BASE_ID=app...
+NEETOCAL_BOOKING_URL=https://...   # optional, has a default
 ```
 
 ```

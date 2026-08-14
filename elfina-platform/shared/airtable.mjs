@@ -33,15 +33,26 @@ export function airtableClient() {
         params.set(`sort[${i}][field]`, s.field);
         params.set(`sort[${i}][direction]`, s.direction ?? "asc");
       });
-      const qs = params.toString() ? `?${params}` : "";
-      const body = await request(`/${encodeURIComponent(table)}${qs}`);
-      return body.records;
+      // Airtable caps each page at 100 records and returns an `offset` when
+      // there's more -- without following it, list() silently truncates on
+      // any table past 100 rows.
+      const records = [];
+      let offset;
+      do {
+        if (offset) params.set("offset", offset);
+        else params.delete("offset");
+        const qs = params.toString() ? `?${params}` : "";
+        const body = await request(`/${encodeURIComponent(table)}${qs}`);
+        records.push(...body.records);
+        offset = body.offset;
+      } while (offset);
+      return records;
     },
     async get(table, id) {
       return request(`/${encodeURIComponent(table)}/${id}`);
     },
-    async create(table, fields) {
-      return request(`/${encodeURIComponent(table)}`, { method: "POST", body: JSON.stringify({ fields }) });
+    async create(table, fields, { typecast = false } = {}) {
+      return request(`/${encodeURIComponent(table)}`, { method: "POST", body: JSON.stringify({ fields, typecast }) });
     },
     async update(table, id, fields) {
       return request(`/${encodeURIComponent(table)}/${id}`, { method: "PATCH", body: JSON.stringify({ fields }) });
