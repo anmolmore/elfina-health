@@ -28,7 +28,7 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cd elfina-platform && PORT=5000 node services/companion-app/src/index.mjs"
+args = "cd elfina-platform && npm install && PORT=5000 node services/companion-app/src/index.mjs"
 waitForPort = 5000
 
 [workflows.workflow.metadata]
@@ -40,7 +40,7 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cd elfina-platform && PORT=3000 node services/booking-app/src/index.mjs"
+args = "cd elfina-platform && npm install && PORT=3000 node services/booking-app/src/index.mjs"
 waitForPort = 3000
 
 [workflows.workflow.metadata]
@@ -56,4 +56,5 @@ externalPort = 80
 
 [deployment]
 deploymentTarget = "autoscale"
+build = ["npm", "--prefix", "elfina-platform", "install"]
 run = ["node", "elfina-platform/services/companion-app/src/index.mjs"]
