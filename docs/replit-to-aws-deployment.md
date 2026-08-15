@@ -6,7 +6,7 @@ onto AWS, and how to operate them there.
 ## Why App Runner
 
 Both services are small stateless Express apps with no persistent local
-state (all data lives in Airtable, per `migration-strategy.md` /
+state (all data lives in Airtable, per
 `airtable-to-rds-migration-plan.md`). That rules out anything needing a VPC,
 load balancer, or orchestration to justify itself:
 

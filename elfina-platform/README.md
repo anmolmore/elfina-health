@@ -31,7 +31,7 @@ field by record id — `ARRAYJOIN({LinkField})` returns the linked record's
 *display name*, not its id, so `SEARCH(id, ARRAYJOIN(...))` silently never
 matches. Both services fetch and filter in application code instead. That's
 fine at this table size and stops being fine well before 3x volume — worth
-tracking as a real constraint, not just a mock one (see `migration-strategy.md`).
+tracking as a real constraint, not just a mock one.
 
 ## NeetoCal booking (companion-app)
 
@@ -87,7 +87,7 @@ see the session appear.
 ## What's deliberately not built yet
 
 - No auth — client/booking pages are unauthenticated links, matching "ship
-  fast" but explicitly a known gap (see `migration-strategy.md`).
+  fast" but explicitly a known gap.
 - No real Google Calendar/Meet integration — links are generated strings.
 - No real WhatsApp/email sending.
 - Booking safety is a single-process in-memory lock, not a real constraint

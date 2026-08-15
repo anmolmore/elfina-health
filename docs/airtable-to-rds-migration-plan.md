@@ -1,6 +1,5 @@
 # Airtable → RDS Postgres — Migration Plan
 
-Tactical companion to `migration-strategy.md` (strategic case + sequencing).
 This is the "how," grounded in the actual code in `elfina-platform/`.
 
 ## Architecture: earlier vs. now
@@ -66,8 +65,8 @@ again to do.
 This changes the plan's framing slightly from the first pass: the
 NeetoCal integration is a second demonstration that *every* new feature
 built directly against Airtable adds another writer to coordinate later.
-Reinforces the stance in `migration-strategy.md` — start the RDS migration
-now, not after more surface area gets built on the old system.
+Reinforces the case for starting the RDS migration now, not after more
+surface area gets built on the old system.
 
 ## 1. Target schema (Postgres)
 
@@ -145,7 +144,7 @@ create table sessions (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
--- the actual fix for the double-booking gap in migration-strategy.md section 1,
+-- the actual fix for the original double-booking gap,
 -- and now closes the *second* gap: booking-app and the NeetoCal path in
 -- companion-app can no longer both take the same therapist/slot either.
 create unique index sessions_therapist_slot_uq
@@ -162,7 +161,7 @@ create table feedback (
   created_at timestamptz not null default now()
 );
 
--- DPDP: who touched what, when, why (migration-strategy.md section 7). Append-only.
+-- DPDP: who touched what, when, why. Append-only.
 create table audit_log (
   id bigint generated always as identity primary key,
   occurred_at timestamptz not null default now(),
@@ -234,9 +233,9 @@ unverified shape right now.
 
 **Phase 5 — Shadow-read / drift check. Not started.** Scheduled diff of Postgres vs.
 Airtable per table via `airtable_id`. Cutover gate: flat drift for 48h,
-not a calendar date (migration-strategy.md section 5).
+not a calendar date.
 
-**Phase 6 — Cutover, table by table, Sessions first** (migration-strategy.md section 4):
+**Phase 6 — Cutover, table by table, Sessions first**:
 1. Sessions + Availability (booking-app depends on Availability directly).
    `sessions_therapist_slot_uq` now does the double-booking protection for
    real, across all three writers — the in-process `withLock` in
@@ -263,7 +262,7 @@ Reversible through Phase 6 steps 1–3 by flipping `store.mjs`'s read source
 back to Airtable — Airtable still gets every write until 6.4. After 6.4,
 rollback means replaying the dual-write failure log back into Airtable,
 which is exactly why Phase 5 has to show zero unexplained drift first. No
-Friday cutovers (migration-strategy.md section 5).
+Friday cutovers.
 
 ## 5. Failure modes this closes
 
@@ -275,7 +274,7 @@ Friday cutovers (migration-strategy.md section 5).
    makes "store the raw thing, reconcile later" the norm instead of an
    ad hoc fix bolted onto one endpoint.
 
-## 6. What this doesn't include (see migration-strategy.md section 8)
+## 6. What this doesn't include
 
 No ORM opinion — plain `pg` + hand-written migrations fits a 2-engineer
 team the same way `shared/airtable.mjs` being hand-rolled did. No

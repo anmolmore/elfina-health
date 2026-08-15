@@ -18,7 +18,5 @@ Replit and `elfina-platform/README.md` for full setup.
 
 ## Docs
 
-- `docs/migration-strategy.md` — why/what/when for moving off Airtable + Replit
 - `docs/airtable-to-rds-migration-plan.md` — schema + dual-write implementation detail
 - `docs/replit-to-aws-deployment.md` — AWS App Runner deployment + operations
-- `docs/target-vision-architecture.md` — longer-term product architecture
