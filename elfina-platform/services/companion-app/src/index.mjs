@@ -141,9 +141,6 @@ app.get("/clients/:id/book", async (req, res) => {
          <li style="margin-bottom:.5rem">✓ No pressure to start – just guidance</li>
        </ul>
        <p style="font-weight:600">Book an assessment call for INR 99</p>
-       <p class="muted">Scheduling handled by NeetoCal. Once you confirm a time below, it's saved back to ${client.fields.Name}'s
-         profile automatically -- if that doesn't happen (network hiccup, ad blocker on the embed), use the manual confirm
-         button that appears after booking.</p>
        <div class="card" style="padding:0;overflow:hidden">
          <iframe id="neetocal-frame" src="${embedUrl.toString()}" width="100%" height="700" frameborder="0" style="display:block"></iframe>
        </div>

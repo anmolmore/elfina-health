@@ -105,7 +105,6 @@ app.get("/", async (_req, res) => {
     page(
       "Book a session",
       `<h1>Book a session</h1>
-       <p class="muted">Availability generated from each therapist's real weekly schedule, minus what's already booked in Airtable.</p>
        ${bookable
          .map((t) => {
            const a = activeAvailabilityByTherapist.get(t.id);
