@@ -6,7 +6,7 @@ onto AWS, and how to operate them there.
 ## Why App Runner
 
 Both services are small stateless Express apps with no persistent local
-state (all data lives in Airtable, per `migration-memo.md` /
+state (all data lives in Airtable, per `migration-strategy.md` /
 `airtable-to-rds-migration-plan.md`). That rules out anything needing a VPC,
 load balancer, or orchestration to justify itself:
 
@@ -21,8 +21,8 @@ load balancer, or orchestration to justify itself:
   extra benefit here.
 
 This is a demo deployment on a **low budget** — every choice below optimizes
-for "cheapest way to have a real HTTPS URL a client can click," not for
-production scale.
+for "cheapest way to have a real, clickable HTTPS URL," not for production
+scale.
 
 ## What exists in AWS (account `010221970625`, region `ap-south-1`)
 
@@ -100,7 +100,7 @@ Paused services keep their config/image and cost ~$0 compute while paused.
 ## What this doesn't do yet
 
 - No custom domain — using the default `*.awsapprunner.com` URLs, fine for a
-  client demo.
+  demo.
 - No CI/CD — deploys are the manual `docker build && push && start-deployment`
   steps above, matching the low-budget/demo scope. Worth automating (e.g.
   GitHub Actions → ECR → App Runner) once this is more than a demo.
