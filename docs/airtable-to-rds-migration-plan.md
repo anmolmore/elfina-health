@@ -3,6 +3,35 @@
 Tactical companion to `migration-memo.md` (strategic case + sequencing).
 This is the "how," grounded in the actual code in `elfina-platform/`.
 
+## Architecture: earlier vs. now
+
+**Earlier** — no shared data-access layer. `companion-app` and `booking-app`
+each called `shared/airtable.mjs` directly for every read and write.
+Airtable was the only store, with no schema constraints, no audit trail,
+and no coordination between the two write paths (see "Current state" below
+for the specific gaps this caused).
+
+**Now** — both services import `shared/store.mjs` instead of
+`shared/airtable.mjs` directly (Phase 2, "seam refactor," is done). RDS
+Postgres exists alongside Airtable with the full target schema applied
+(`scripts/rds-schema.sql` via `scripts/apply-schema.mjs`, matching section 1
+below), and historical data has been backfilled into it
+(`scripts/backfill-rds.mjs`, idempotent upsert by `airtable_id`). The store
+seam runs in one of two modes via `STORE_MODE`:
+
+- `airtable` (default) — pure passthrough to `shared/airtable.mjs`. No
+  Postgres involved. This is still what production runs today.
+- `dual` — Airtable write happens first and is what the caller waits on
+  and what the response depends on; a mirror write to Postgres
+  (`shared/store-postgres.mjs`) is then fired and its failure only logged,
+  never thrown or surfaced to the user. Reads still always go to Airtable
+  in both modes — nothing reads from Postgres yet.
+
+In short: Phases 1–3 (schema, seam refactor, backfill) are built. Phase 4
+(dual-write) is implemented and gated behind `STORE_MODE=dual`, not yet the
+default — turning it on for real traffic, then running Phase 5's drift
+check, are the next steps before any read traffic or cutover happens.
+
 ## 0. Current state (updated)
 
 - No backend service yet. Three write paths hit Airtable directly, not one:
@@ -151,39 +180,46 @@ lost" pattern from `companion-app`'s NeetoCal handler into a real column
 instead of a workaround (appending JSON into `Intake Notes` was never
 meant to be permanent).
 
-## 2. Data access layer — the real prerequisite
+## 2. Data access layer — the real prerequisite (done)
 
 Today three places write Airtable independently: `companion-app`'s
 `/intake` and `/clients/:id/book/confirm`, and `booking-app`'s `/book`.
 Dual-write is only tractable with one seam to write through.
 
-Introduce `shared/store.mjs`, Airtable-backed only at first, exposing the
-operations each call site already needs (`clients.create`,
-`sessions.createFromBooking`, `sessions.listByClient`,
-`sessions.listByTherapist`, `availability.findByTherapist`, ...). Change
-all three write paths — including the NeetoCal confirm handler — to go
-through it. Zero behavior change; land and verify before touching
-Postgres.
+`shared/store.mjs` now exists and both services' `src/index.mjs` import it
+in place of `shared/airtable.mjs` directly. Its `list`/`get` are pure
+Airtable passthrough (unchanged behavior); `create`/`update` add the
+`STORE_MODE=dual` mirror-write branch described above. `shared/store.mjs`
+kept the existing `list/get/create/update` shape of `shared/airtable.mjs`
+rather than growing table-specific methods (`clients.create`,
+`sessions.createFromBooking`, etc.) — call sites needed no changes beyond
+the import swap, which is what made this a genuinely zero-behavior-change
+refactor.
 
 ## 3. Phased rollout
 
-**Phase 1 — Schema + audit log.** Run the DDL above against RDS. Airtable
-stays sole source of truth.
+**Phase 1 — Schema + audit log. Done.** `scripts/rds-schema.sql` (applied
+via `scripts/apply-schema.mjs`, idempotent `create table if not exists`)
+matches the DDL in section 1. Airtable remains sole source of truth — RDS
+has the schema and the backfilled rows but nothing reads from or depends
+on it yet.
 
-**Phase 2 — Seam refactor.** `store.mjs` as above, covering all three
-current write paths.
+**Phase 2 — Seam refactor. Done.** `shared/store.mjs`, covering all three
+current write paths, as above.
 
-**Phase 3 — Backfill.** One-off script, same idempotent-upsert-by-`airtable_id`
-style as `scripts/create-base.mjs`. Order: Clients, Therapists →
-Availability, Matches → Sessions → Feedback.
+**Phase 3 — Backfill. Done.** `scripts/backfill-rds.mjs`, idempotent
+upsert-by-`airtable_id`, same style as `scripts/create-base.mjs`. Order:
+Clients, Therapists → Availability, Matches → Sessions → Feedback.
 
-**Phase 4 — Dual-write.** `store.mjs` writes Airtable (authoritative) +
-Postgres (best-effort, logged on failure, never blocks the response).
-Reads still Airtable. Run a few days under real traffic — including real
-NeetoCal bookings, which is the one write path with genuinely unverified
-shape right now.
+**Phase 4 — Dual-write. Implemented, not yet the default.** `store.mjs`
+writes Airtable (authoritative, blocking) + Postgres
+(`shared/store-postgres.mjs`, best-effort, logged on failure, never blocks
+the response) when `STORE_MODE=dual`. Production still runs the default
+`airtable` mode. Next step: flip `STORE_MODE=dual` on and run it a few
+days under real traffic — including real NeetoCal bookings, which is the
+one write path with genuinely unverified shape right now.
 
-**Phase 5 — Shadow-read / drift check.** Scheduled diff of Postgres vs.
+**Phase 5 — Shadow-read / drift check. Not started.** Scheduled diff of Postgres vs.
 Airtable per table via `airtable_id`. Cutover gate: flat drift for 48h,
 not a calendar date (memo §5).
 
