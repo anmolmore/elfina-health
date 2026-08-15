@@ -236,7 +236,8 @@ app.post("/book", async (req, res) => {
     if (err.message === "CAPACITY_REACHED") {
       return res.status(409).send(page("Capacity reached", `<p>This therapist is already at their weekly capacity for that week. <a href="/therapists/${therapistId}">Pick another week</a>.</p>`));
     }
-    throw err;
+    console.error("[booking-app] failed to book session", err);
+    res.status(500).send(page("Error", "<p>Something went wrong while booking. Please try again.</p>"));
   }
 });
 
