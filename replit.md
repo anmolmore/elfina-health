@@ -1,4 +1,4 @@
-# Elfina Health — Replit Demo
+# Replit Demo
 
 Two Node.js/Express services backed by a live Airtable base.
 

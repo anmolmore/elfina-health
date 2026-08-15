@@ -1,7 +1,7 @@
-# Elfina Health — real platform (Companion App + Booking App)
+# Platform (Companion App + Booking App)
 
 Two real Node/Express services that read and write a live Airtable base
-directly — no mocks. Built to mirror the brief's actual architecture:
+directly — no mocks. Built to mirror the actual production architecture:
 Companion App (client-facing) and a separate Booking App, both treating
 Airtable as the system of record.
 
@@ -31,7 +31,7 @@ field by record id — `ARRAYJOIN({LinkField})` returns the linked record's
 *display name*, not its id, so `SEARCH(id, ARRAYJOIN(...))` silently never
 matches. Both services fetch and filter in application code instead. That's
 fine at this table size and stops being fine well before 3x volume — worth
-naming as a real constraint in the memo, not just a mock one.
+tracking as a real constraint, not just a mock one (see `migration-strategy.md`).
 
 ## NeetoCal booking (companion-app)
 
@@ -84,10 +84,10 @@ see the session appear.
    if the Repl root is the service directory itself).
 4. Replit injects `$PORT`; both services already read it.
 
-## What's cut, on purpose
+## What's deliberately not built yet
 
 - No auth — client/booking pages are unauthenticated links, matching "ship
-  fast" but explicitly a gap for the memo's cut list.
+  fast" but explicitly a known gap (see `migration-strategy.md`).
 - No real Google Calendar/Meet integration — links are generated strings.
 - No real WhatsApp/email sending.
 - Booking safety is a single-process in-memory lock, not a real constraint
