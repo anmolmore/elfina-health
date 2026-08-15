@@ -1,7 +1,8 @@
 import express from "express";
-import { airtableClient, linkOne } from "../../../shared/airtable.mjs";
+import { linkOne } from "../../../shared/airtable.mjs";
+import { createStore } from "../../../shared/store.mjs";
 
-const at = airtableClient();
+const at = createStore();
 const app = express();
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -133,7 +134,13 @@ app.get("/clients/:id/book", async (req, res) => {
   res.send(
     page(
       `Book — ${client.fields.Name}`,
-      `<h1>Book a session</h1>
+      `<h1>Find the right therapist – in the first go</h1>
+       <ul class="muted" style="list-style:none;padding:0;margin:1rem 0">
+         <li style="margin-bottom:.5rem">✓ A 30-min guided call with a therapy expert</li>
+         <li style="margin-bottom:.5rem">✓ Structured questions to understand your needs</li>
+         <li style="margin-bottom:.5rem">✓ No pressure to start – just guidance</li>
+       </ul>
+       <p style="font-weight:600">Book an assessment call for INR 99</p>
        <p class="muted">Scheduling handled by NeetoCal. Once you confirm a time below, it's saved back to ${client.fields.Name}'s
          profile automatically -- if that doesn't happen (network hiccup, ad blocker on the embed), use the manual confirm
          button that appears after booking.</p>

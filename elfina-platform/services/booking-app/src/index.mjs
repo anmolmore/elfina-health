@@ -1,10 +1,15 @@
 import express from "express";
-import { airtableClient, linkOne } from "../../../shared/airtable.mjs";
+import { linkOne } from "../../../shared/airtable.mjs";
+import { createStore } from "../../../shared/store.mjs";
 
 // See companion-app/src/index.mjs for why: Airtable's filterByFormula can't
 // search linked-record fields by id, so we fetch and filter in code.
 
-const at = airtableClient();
+// Companion App runs as a separate service -- this is only used to link
+// back to a client's profile after a booking, not for any API call.
+const COMPANION_APP_URL = process.env.COMPANION_APP_URL || "https://nxpq75mzhp.ap-south-1.awsapprunner.com";
+
+const at = createStore();
 const app = express();
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -135,7 +140,7 @@ app.get("/therapists/:id", async (req, res) => {
        <p class="muted">${therapist.fields.Bio || ""}</p>
        <p class="muted">Paste the Client ID from the Companion App (the URL after /clients/), then pick a slot.</p>
        <div class="card">
-         <label>Client ID<br><input id="clientId" placeholder="recXXXXXXXXXXXXXX" style="width:100%"></label>
+         <label>Client ID<br><input id="clientId" placeholder="recXXXXXXXXXXXXXX" value="recLwYoO9F4UhrsiR" style="width:100%"></label>
        </div>
        <div class="grid">
          ${openSlots
@@ -225,7 +230,7 @@ app.post("/book", async (req, res) => {
            <p><a href="${session.fields["Meeting Link"]}">${session.fields["Meeting Link"]}</a></p>
            <p class="muted">Session ID: ${session.id}</p>
          </div>
-         <p><a href="/clients-redirect" onclick="return false" class="muted">View in Companion App: /clients/${clientId} (companion-app service)</a></p>
+         <p><a href="${COMPANION_APP_URL}/clients/${clientId}" class="muted">View in Companion App →</a></p>
          <p class="muted"><a href="/">← Book another</a></p>`
       )
     );
