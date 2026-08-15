@@ -19,18 +19,26 @@ below), and historical data has been backfilled into it
 (`scripts/backfill-rds.mjs`, idempotent upsert by `airtable_id`). The store
 seam runs in one of two modes via `STORE_MODE`:
 
-- `airtable` (default) — pure passthrough to `shared/airtable.mjs`. No
-  Postgres involved. This is still what production runs today.
+- `airtable` — pure passthrough to `shared/airtable.mjs`. No Postgres
+  involved.
 - `dual` — Airtable write happens first and is what the caller waits on
   and what the response depends on; a mirror write to Postgres
   (`shared/store-postgres.mjs`) is then fired and its failure only logged,
   never thrown or surfaced to the user. Reads still always go to Airtable
   in both modes — nothing reads from Postgres yet.
 
+Production currently runs `STORE_MODE=dual`, set during verification and
+left in place. It's harmless with RDS/the VPC connector torn down (see
+`replit-to-aws-deployment.md`) — mirror attempts fail fast and get logged,
+never affecting a response — but it means the mirror write is currently a
+no-op in practice, not actively writing anywhere. Flip back to `dual`
+against a live RDS instance (same doc) to resume real dual-write.
+
 In short: Phases 1–3 (schema, seam refactor, backfill) are built. Phase 4
-(dual-write) is implemented and gated behind `STORE_MODE=dual`, not yet the
-default — turning it on for real traffic, then running Phase 5's drift
-check, are the next steps before any read traffic or cutover happens.
+(dual-write) is implemented and was verified end-to-end against a live RDS
+instance, including the RDS-stopped case. Phase 5's drift check is the next
+step before any read traffic or cutover happens, and needs RDS running
+again to do.
 
 ## 0. Current state (updated)
 
@@ -211,13 +219,18 @@ current write paths, as above.
 upsert-by-`airtable_id`, same style as `scripts/create-base.mjs`. Order:
 Clients, Therapists → Availability, Matches → Sessions → Feedback.
 
-**Phase 4 — Dual-write. Implemented, not yet the default.** `store.mjs`
+**Phase 4 — Dual-write. Implemented and verified.** `store.mjs`
 writes Airtable (authoritative, blocking) + Postgres
 (`shared/store-postgres.mjs`, best-effort, logged on failure, never blocks
-the response) when `STORE_MODE=dual`. Production still runs the default
-`airtable` mode. Next step: flip `STORE_MODE=dual` on and run it a few
-days under real traffic — including real NeetoCal bookings, which is the
-one write path with genuinely unverified shape right now.
+the response) when `STORE_MODE=dual`. Verified against a live RDS instance
+with a real intake and a real booking, both mirrored correctly with
+resolved foreign keys — and verified again with RDS deliberately stopped,
+confirming the mirror failure never breaks a request. Production currently
+has `STORE_MODE=dual` set but RDS/the VPC connector are torn down (cost —
+see `replit-to-aws-deployment.md`), so it's presently a no-op in practice.
+Next step, once RDS is back: run dual-write a few days under real traffic —
+including real NeetoCal bookings, the one write path with genuinely
+unverified shape right now.
 
 **Phase 5 — Shadow-read / drift check. Not started.** Scheduled diff of Postgres vs.
 Airtable per table via `airtable_id`. Cutover gate: flat drift for 48h,
@@ -236,7 +249,13 @@ not a calendar date (migration-strategy.md section 5).
 **Phase 7 — Retire Airtable + WhaleSync.** Drop `airtable_id` columns in a
 follow-up migration.
 
-**Phase 8 — Companion App off Replit**, once it's a thin API client.
+**Phase 8 — Companion App off Replit. Done, ahead of this plan's original
+sequencing.** Both `companion-app` and `booking-app` moved to AWS App
+Runner (`replit-to-aws-deployment.md`) before the "thin API client" trigger
+condition below was met — they still write Airtable directly, no backend
+service exists yet. The deployment move and the data-layer migration turned
+out to be separable; doing the cheap one (deployment) first didn't block or
+require the harder one (RDS cutover).
 
 ## 4. Rollback
 
