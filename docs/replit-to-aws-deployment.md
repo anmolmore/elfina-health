@@ -97,110 +97,45 @@ Paused services keep their config/image and cost ~$0 compute while paused.
 - Companion App: `https://nxpq75mzhp.ap-south-1.awsapprunner.com`
 - Booking App: `https://jhj7bph4ar.ap-south-1.awsapprunner.com`
 
-## Current state (as of the RDS migration work)
+## Current state
 
-Both App Runner services are **paused** and the NAT Gateway has been
-**deleted** to hold cost near-zero while nothing is being demoed (see "Cost:
-current paused state" below). Bring them back with the two commands in
-"Resuming for a demo".
+Both App Runner services are **paused**. The RDS/dual-write experiment
+described below has been **fully torn down** — Airtable is the only store
+again, matching the app's pre-migration behavior.
 
-## Airtable → RDS dual-write (`STORE_MODE`)
+## Airtable → RDS dual-write (removed)
 
-Following `airtable-to-rds-migration-plan.md`, both services now go through
-`shared/store.mjs` instead of calling `shared/airtable.mjs` directly.
-`store.mjs` exposes the exact same `list/get/create/update` shape, so this
-was a "zero behavior change" swap — the only new thing is a switch:
+For a while both services went through `shared/store.mjs` with a
+`STORE_MODE=dual` option that mirrored writes to a Postgres RDS instance
+(`shared/store-postgres.mjs`), per `airtable-to-rds-migration-plan.md`.
+This was fully reverted:
 
-- **`STORE_MODE=airtable`** (current default) — pure passthrough, no
-  Postgres involved at all.
-- **`STORE_MODE=dual`** — Airtable write happens first and is what the
-  caller/response waits on; a best-effort mirror write to Postgres
-  (`shared/store-postgres.mjs`) is then fired and its failure only logged
-  (`[store] postgres mirror create/update failed for <table>/<id> <reason>`),
-  never thrown. This was verified live: with `STORE_MODE=dual` and the RDS
-  instance stopped, a real booking through the Booking App still returned
-  200 and completed in Airtable, with only a logged
-  `Connection terminated due to connection timeout` in CloudWatch.
+- `shared/store.mjs` is back to a pure Airtable passthrough (no `STORE_MODE`
+  branch).
+- `shared/store-postgres.mjs` and the RDS-only scripts
+  (`scripts/apply-schema.mjs`, `scripts/backfill-rds.mjs`,
+  `scripts/rds-schema.sql`) were deleted.
+- The `pg` dependency was dropped from both services' `package.json`.
+- All RDS-related AWS resources were deleted: the `elfina-rds` instance (no
+  final snapshot — Airtable was always the source of truth), its DB subnet
+  group, its security group, the bastion security group, the App Runner VPC
+  connector and its security group, the `/elfina/DATABASE_URL` and
+  `/elfina/STORE_MODE` SSM parameters, and the DATABASE_URL/STORE_MODE
+  grants on `AppRunnerElfinaInstanceRole`'s SSM policy.
+- The NAT Gateway this setup needed had already been deleted earlier (see
+  git history for that rationale if reviving RDS is ever wanted again).
 
-Set via SSM `String` parameter `/elfina/STORE_MODE`, read by the App Runner
-`RuntimeEnvironmentVariables`.
-
-### What exists for RDS (all in `ap-south-1`, account `010221970625`)
-
-| Resource | Name / Id | Notes |
-|---|---|---|
-| RDS instance | `elfina-rds` | `db.t4g.micro`, single-AZ, 20GB gp3, Postgres 17.9, **not publicly accessible**, encrypted. Currently **stopped**. |
-| DB subnet group | `elfina-rds-subnet-group` | Default VPC's 3 subnets |
-| Security group | `elfina-rds-sg` | Allows 5432 only from the App Runner VPC connector's SG (and a now-terminated bastion's SG, harmless leftover rule) |
-| SSM Parameter (SecureString) | `/elfina/DATABASE_URL` | Postgres connection string |
-| SSM Parameter (String) | `/elfina/STORE_MODE` | `dual` or `airtable` |
-| App Runner VPC Connector | `elfina-vpc-connector` | Currently **detached** from both services (their `NetworkConfiguration.EgressConfiguration` is back to `DEFAULT`) |
-
-Schema: `elfina-platform/scripts/rds-schema.sql` (applied via
-`scripts/apply-schema.mjs`). Backfill: `elfina-platform/scripts/backfill-rds.mjs`,
-idempotent upsert by `airtable_id`, already run once (122 clients, 42
-therapists, 42 availability, 122 matches, 472 sessions, 100 feedback).
-
-RDS has **no public endpoint** — reaching it (for schema/backfill/manual
-inspection) requires a tunnel. The pattern used: a short-lived `t4g.nano` EC2
-instance in the same VPC with an SSM-only IAM role (`elfina-bastion-ssm-role`
-/ `elfina-bastion-ssm-profile`, `AmazonSSMManagedInstanceCore`), reachable
-with no SSH key via:
-
-```bash
-aws ssm start-session --region ap-south-1 --target <instance-id> \
-  --document-name AWS-StartPortForwardingSessionToRemoteHost \
-  --parameters '{"host":["<rds-endpoint>"],"portNumber":["5432"],"localPortNumber":["15432"]}'
-# then point DATABASE_URL at postgres://...@localhost:15432/elfina
-```
-
-Requires the `session-manager-plugin` (`brew install --cask
-session-manager-plugin`, needs sudo). The instance used for this has since
-been terminated — recreate one if RDS needs inspecting again (`ami-07c8b91119c5b1b1e`,
-Amazon Linux 2023 arm64, subnet in the default VPC, `elfina-bastion-ssm-profile`).
-
-### Why a NAT Gateway was needed, and why it's gone now
-
-Attaching an App Runner VPC connector routes **all** outbound traffic
-through the VPC, not just DB traffic — so once attached, the services lost
-their route to the internet (Airtable) entirely, since the default VPC's
-subnets had no NAT. A NAT Gateway + a new private route table
-(`0.0.0.0/0 -> NAT`) associated with the connector's 3 subnets fixed that.
-
-The NAT Gateway billed a flat ~$0.045/hour regardless of use (~$8/week) —
-once RDS testing was done and the demo doesn't need live RDS access (the app
-runs fine on Airtable alone, `STORE_MODE=airtable` default), both services
-were reverted to `EgressType: DEFAULT` and the NAT Gateway + its EIP were
-deleted. The VPC connector resource itself still exists (no charge) but is
-unattached.
-
-### Resuming RDS + dual-write later (not needed for a plain demo)
-
-1. Recreate the NAT Gateway in the existing NAT subnet, in the existing
-   route table (`0.0.0.0/0` route was left pointing at the old, now-deleted
-   NAT id — replace it with the new one).
-2. Re-attach `elfina-vpc-connector` to both services
-   (`NetworkConfiguration.EgressConfiguration.EgressType: VPC`) and
-   redeploy.
-3. `aws rds start-db-instance --db-instance-identifier elfina-rds`.
-4. Set `/elfina/STORE_MODE` back to `dual` if it's been flipped to
-   `airtable`, and redeploy if changed.
-
-Roughly 15-20 minutes end to end, not instant — plan ahead if this is ever
-needed live rather than doing it mid-demo.
+Reviving RDS-backed storage later would mean redoing this migration from
+scratch (new instance, new schema, new backfill) rather than "resuming"
+anything — nothing paused/stopped survives this teardown.
 
 ## Cost: current paused state
 
 - App Runner (both services): **paused**, ~$0 compute.
-- NAT Gateway: **deleted**, $0 (no stop/start state exists for this resource
-  type — deletion was the only way to stop the ~$8/week charge).
-- RDS: **stopped**, only 20GB storage billing (~$0.50-0.60/week). AWS
-  auto-restarts a stopped RDS instance after 7 days regardless of anything
-  done here — re-stop it (`aws rds stop-db-instance`) if that happens before
-  it's needed again.
-- Everything else (VPC, subnets, security groups, IAM roles, ECR images,
-  SSM parameters, the applied schema and backfilled rows in RDS storage) has
-  no ongoing hourly cost and was left in place.
+- RDS, NAT Gateway, VPC connector: **deleted**, $0.
+- Everything else (VPC, subnets, remaining security groups, IAM roles, ECR
+  images, `AIRTABLE_PAT`/`AIRTABLE_BASE_ID` SSM parameters) has no ongoing
+  hourly cost and was left in place.
 
 ## Resuming for a demo
 
